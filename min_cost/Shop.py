@@ -53,31 +53,38 @@ class Shop:
     # 此函数计算完利润后，需要修改req的属性，包括req.sfc里各个VNF的属性
     def caculate_cost(self)->float:
         caculator = Caculator()
-        # caculator = Contrast()
-        cost = 0
+        cost1 = 0
         caculator.calculate_hardware()
         # print(len(caculator.nodes))
         min_node_cost = sys.maxsize
         max_node_cost = 0
-        for node in caculator.nodes.values():
-            min_node_cost = min(min_node_cost,node.cost)
-            max_node_cost = max(max_node_cost,node.cost)
-        for node in caculator.nodes.values():
-            cost += node.cost*self.node_discount(node)
+        # for node in caculator.nodes:
+        #     min_node_cost = min(min_node_cost,node.cost)
+        #     max_node_cost = max(max_node_cost,node.cost)
+        for node in caculator.nodes:
+            cost1 += node.cost*self.node_discount(node)
         # print("min_node_cost" + str(min_node_cost))
         # print("max_node_cost" + str(max_node_cost))
-        print("nodes cost " + str(cost))
+        print("nodes cost1 " + str(cost1))
         min_edge_cost = sys.maxsize
         max_edge_cost = 0
-        for edge in caculator.edges_pair.values():
-            min_edge_cost = min(min_edge_cost,edge.cost)
-            max_edge_cost = max(max_edge_cost,edge.cost)
+        # for edge in caculator.edges:
+        #     min_edge_cost = min(min_edge_cost,edge.cost)
+        #     max_edge_cost = max(max_edge_cost,edge.cost)
         # print(len(caculator.edges_pair))
-        for edge in caculator.edges_pair.values():
-            cost += edge.cost*self.edge_discount(edge)
+        for edge in caculator.edges:
+            cost1 += edge.cost*self.edge_discount(edge)
         # print("min_edge_cost" + str(min_edge_cost))
         # print("max_edge_cost" + str(max_edge_cost))
-        return cost
+        contrast = Contrast()
+        cost2 = 0
+        contrast.calculate_hardware()
+        for node in contrast.nodes.values():
+            cost2 += node.cost*self.node_discount(node)
+        print("nodes cost2 " + str(cost2))
+        for edge in contrast.edges.values():
+            cost2 += edge.cost*self.edge_discount(edge)
+        return cost1, cost2
 
     def edge_discount(self, edge:Edge)->float:
         keys = config.Edge_Discount.keys()

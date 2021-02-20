@@ -29,17 +29,17 @@ class Contrast:
     def __init__(self) -> None:
         super().__init__()
         self.nodes = dict()  # 最后得到的所需节点
-        self.edges_pair = dict()  # 最后得到的所需链路<链路名：Edge实例>
+        self.edges = dict()  # 最后得到的所需链路<链路名：Edge实例>
 
     # 计算请求的利润和部署的节点
     # 如果利润不为正，部署节点为0
     def calculate_hardware(self) -> None:
         for req in manager.requests:
             self.choose_path(req)
-        print("{} qualified".format(cnt))
+        print("2 {} qualified".format(cnt))
         for node in self.nodes.values():
             self.get_node_cost(node)
-        for e in self.edges_pair.values():
+        for e in self.edges.values():
             e: Edge
             self.get_edge_cost(e)
 
@@ -89,14 +89,15 @@ class Contrast:
                 node_id = i
         node:DataCenter = manager.nodes[node_id]
         path = Path(path_vec, delay)
-        if not self.check_constraints(req, path, node):
-            return
+        # if not self.check_constraints(req, path, node):
+        #     return
+        self.check_constraints(req,path,node)
         node.requests.add(req)
         self.nodes[node_id] = node
         for i in range(len(path_vec)-1):
             e: Edge = manager.edges[(path_vec[i],path_vec[i+1])]
             e.requests.add(req)
-            self.edges_pair[e.id] = e
+            self.edges[e.id] = e
 
     def check_constraints(self, req: Request, path: Path, node: DataCenter) -> bool:
         global cnt
@@ -125,20 +126,20 @@ class Contrast:
         # 判断是否有足够算力和最低算力开销
         profit: float = req.bid - band_cost - node.unitCpuPrice*process_source
         # 没有可部署的节点，返回False
-        if profit > 0:
-            req.process_source[node.id] = process_source
-            # if req.id == 63:
-            #     print("req63's node is {}".format(node.id))
-            node.requests.add(req)
-            node.cost += node.unitCpuPrice*req.process_source[node.id]
-            for e in path.edges:
-                e: Edge
-                e.cost += req.bandwidth*e.unitprice
-            cnt += 1
-            return True
-        else:
-            # print("req_id {} failed because profit".format(req.id))
-            return False
+        # if profit > 0:
+        req.process_source[node.id] = process_source
+        # if req.id == 63:
+        #     print("req63's node is {}".format(node.id))
+        node.requests.add(req)
+        node.cost += node.unitCpuPrice*req.process_source[node.id]
+        for e in path.edges:
+            e: Edge
+            e.cost += req.bandwidth*e.unitprice
+        cnt += 1
+        return True
+        # else:
+        #     # print("req_id {} failed because profit".format(req.id))
+        #     return False
 
     def link_gain(self, e: Edge) -> float:
         if len(e.requests) == 0:

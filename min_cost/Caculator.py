@@ -27,8 +27,8 @@ class Caculator:
     def __init__(self) -> None:
         super().__init__()
         self.paths_pair = dict()  # <路径向量：Path实例>
-        self.nodes = dict()  # 最后得到的所需节点
-        self.edges_pair = dict()  # 最后得到的所需链路<链路名：Edge实例>
+        self.nodes = set()  # 最后得到的所需节点
+        self.edges = set()  # 最后得到的所需链路<链路名：Edge实例>
         self.P_is = dict() # 元素为req_id:P_i
         self.L_is = dict()  # 元素为req_id:L_i
 
@@ -37,7 +37,7 @@ class Caculator:
     def calculate_hardware(self) -> None:
         for req in manager.requests:
             self.choose_path(req)
-        print("{} qualified".format(cnt))
+        print("1 {} qualified".format(cnt))
         paths = self.paths_pair.values()
         paths = list(paths)
         for p in paths:
@@ -46,27 +46,26 @@ class Caculator:
         for p in paths:
             p: Path
             # print("{}'s weight is {}".format(p.vec, p.weight))
-            for req_id in self.P_is:
-                # print(len(P_i))
-                P_i: set = self.P_is[req_id]
-                if p.vec not in P_i or len(P_i) == 1:
+            for req in manager.requests:
+                req:Request
+                if p.vec not in req.path_vec or len(req.path_vec) <= 1:
                     continue
-                for pj in P_i:
-                    if pj != p.vec:
-                        self.del_edgecount(pj, req_id)
-                self.del_node(p.vec, req_id)
-                P_i = {pj}
-        for node in self.nodes.values():
+                self.del_edgecount(p.vec, req)
+                self.del_node(p.vec, req)
+        
+        r_num = 0
+        for node in manager.nodes.values():
+            node:DataCenter
+            if len(node.requests) > 0:
+                self.nodes.add(node)
+                r_num += len(node.requests)
             self.get_node_cost(node)
-        for L_i in self.L_is.values():
-            for e in L_i.values():
-                e: Edge
-                self.get_edge_cost(e)
-                if e.id in self.edges_pair:
-                    self.edges_pair[e.id].cost += e.cost
-                    self.edges_pair[e.id].bandWidth += e.bandWidth
-                else:
-                    self.edges_pair[e.id] = e
+        print(r_num)
+        for e in manager.edges.values():
+            e:Request
+            if len(e.requests) > 0:
+                self.edges.add(e)
+            self.get_edge_cost(e)
 
     def get_node_cost(self, node: DataCenter):
         node.cpu = 0
@@ -87,9 +86,6 @@ class Caculator:
         edge.cost = 0
         if len(edge.requests) == 0:
             return
-        for L_i in self.L_is.values():
-            if edge.id in L_i:
-                edge.requests |= L_i[edge.id].requests
         for r in edge.requests:
             r: Request
             edge.bandWidth += r.bandwidth
@@ -134,29 +130,6 @@ class Caculator:
                 if not self.check_constraints(req, path, node):
                     continue
             node.cpu += req.process_source[node.id]
-            if node.id not in self.nodes:
-                self.nodes[node.id] = node
-            P_i.add(path.vec)
-            self.paths_pair[path_vec].bid += req.bid
-            self.paths_pair[path_vec].band += req.bandwidth
-            self.paths_pair[path_vec].requests.add(req)
-            for p in P_i:
-                # print("src = " + str(req.src) + " dst = "+ str(req.dst))
-                # print("p: {}".format(str(p)))
-                for e in self.paths_pair[p].edges:
-                    e: Edge
-                    if e.id in L_i:
-                        L_i[e.id].usecount += 1
-                    else:
-                        L_i[e.id] = copy.deepcopy(e)
-                        L_i[e.id].usecount = 1
-                    L_i[e.id].requests = {req}
-        # print("req_id: {},length of L_i: {}".format(req.id, len(L_i)))
-        # print("req_id: {},length of P_i: {}".format(req.id, len(P_i)))
-        if len(L_i) > 0:
-            self.L_is[req.id]=L_i
-        if len(P_i) > 0:
-            self.P_is[req.id] = P_i
         cnt += 1
 
     # 计算每条可用路径的选择权重
@@ -174,7 +147,6 @@ class Caculator:
         path.weight = path.bid / (C_v + C_e)
 
     def check_constraints(self, req: Request, path: Path, node: DataCenter) -> bool:
-        global cnt
         # 检查时延
         if path.propagation_delay >= req.maxDelay:
             # print("req_id {} failed because delay".format(req.id))
@@ -202,13 +174,13 @@ class Caculator:
         # 没有可部署的节点，返回False
         if profit > 0:
             req.process_source[node.id] = process_source
-            # if req.id == 63:
-            #     print("req63's node is {}".format(node.id))
+            node.cpu += process_source
             node.requests.add(req)
-            node.cost += node.unitCpuPrice*req.process_source[node.id]
+            req.path_vec.add(path.vec)
             for e in path.edges:
                 e: Edge
                 e.cost += req.bandwidth*e.unitprice
+                manager.edges[e.id].requests.add(req)
             return True
         else:
             # print("req_id {} failed because profit".format(req.id))
@@ -256,42 +228,25 @@ class Caculator:
         # print("maxband: {} gainband: {}".format(maxband, gain_band))
         return gain_band/maxband*v.cost
 
-    def del_edgecount(self, pj: tuple, req_id:int):
-        L_i: dict = self.L_is[req_id]
+    def del_edgecount(self, pj: tuple, req:Request):
+        e_ids = set()
         for i in range(len(pj)-1):
-            if (pj[i], pj[i+1]) not in L_i:
-                continue
-            if L_i[(pj[i], pj[i+1])].usecount > 1:
-                L_i[(pj[i], pj[i+1])].usecount -= 1
+            e_ids.add((pj[i],pj[i+1]))
+        for e in manager.edges.values():
+            e:Edge
+            if e.id not in e_ids:
+                if req in e.requests:
+                    e.requests.remove(req)
             else:
-                L_i.pop((pj[i], pj[i+1]))
-        if len(L_i) == 0:
-            del L_i
-            print("{} 删完了".format(req_id))
+                e.requests.add(req)
 
-    def del_node(self, pj: tuple, req_id:int):
+
+    def del_node(self, pj: tuple, req:Request):
         target_node = -1
-        for r in manager.requests:
-            if r.id != req_id:
-                continue
-            for i in pj:
-                if r in self.nodes[i].requests:
-                    if target_node == -1 or self.nodes[i].cost >= self.nodes[target_node].cost:
-                        target_node = i
-        for pj in self.P_is[req_id]:
-            for i in pj:
-                if r in self.nodes[i].requests and i != target_node:
-                    if req_id == 34:
-                        print(i)
-                    self.nodes[i].requests.remove(r)
-        # if target_node == -1:
-        #     print("req{}'s targetnode is -1".format(req_id))
-        # for i in pj:
-        #     for r in self.paths_pair[pj].requests:
-        #         r: Request
-        #         if r in self.nodes[i].requests:
-        #             self.nodes[i].cpu -= r.process_source[i]
-        #             self.nodes[i].requests.remove(r)
-        #         if self.nodes[i].cpu <= 0 or len(self.nodes[i].requests):
-        #             print("节点{}不需要了".format(i))
-        #             self.nodes.pop(i)
+        for i in pj:
+            if req in manager.nodes[i].requests:
+                if target_node == -1 or manager.nodes[i].cost >= manager.nodes[target_node].cost:
+                    target_node = i
+        for node in manager.nodes.values():
+            if req in node.requests and node.id != target_node:
+                node.requests.remove(req)
