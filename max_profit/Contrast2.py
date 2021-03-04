@@ -2,9 +2,10 @@
 """
 本文件负责计算请求的部署节点以及利润
 """
+from os import pipe
 import config
 
-from Manager import manager
+from Manager import Manager
 from DataCenter import DataCenter
 from Request import Request
 from Edge import Edge
@@ -20,7 +21,7 @@ def cmp(x, y):
     else:
         return 1
 
-class Caculator:
+class Contrast2:
     def __init__(self) -> None:
         super().__init__()
         
@@ -35,24 +36,13 @@ class Caculator:
 
     # 返回目标路径
     def choose_path(self,req:Request)->Path:
-        k_paths = dict() # 元素为<路径向量，传播时延>
-        for node in manager.nodes.values():
-            node: DataCenter
-            _,pre_half, pre_delay = Graph().get_shortest_path(req.src, node.id)
-            pre_half = pre_half[::-1]
-            _,second_half, second_delay = Graph().get_shortest_path(node.id, req.dst)
-            second_half = second_half[::-1]
-            path_vec = pre_half + second_half[1:]
-            path_vec = tuple(path_vec)
-            if self.has_circle(path_vec) or pre_delay+second_delay>=req.maxDelay:
-                continue
-            # print("src = " + str(req.src) + " dst = "+ str(req.dst))
-            k_paths[path_vec] = pre_delay+second_delay
+        k_paths:dict = Graph().k_shortest_paths(req.src, req.dst, 1)
         paths = list()
         for p in k_paths:
             path:Path = Path(p, k_paths[p])
             if self.check_constraints(req, path):
                 paths.append(path)
+                break
         if len(paths) == 0:
             return None
         for p in paths:
@@ -65,16 +55,6 @@ class Caculator:
         req.path_vec = target_path.vec
         return target_path
         
-    # 判断是否存在环
-    def has_circle(self, vec:tuple):
-        points = set()
-        for i in vec:
-            if i not in points:
-                points.add(i)
-            else:
-                return True
-        return False
-
     # 计算每条可用路径的选择权重
     def path_weight(self, req:Request, path:Path)->None:
         # path的最后两项是带宽成本和贪心利润

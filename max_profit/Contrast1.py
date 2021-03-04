@@ -20,7 +20,7 @@ def cmp(x, y):
     else:
         return 1
 
-class Caculator:
+class Contrast1:
     def __init__(self) -> None:
         super().__init__()
         
@@ -48,6 +48,7 @@ class Caculator:
                 continue
             # print("src = " + str(req.src) + " dst = "+ str(req.dst))
             k_paths[path_vec] = pre_delay+second_delay
+            break
         paths = list()
         for p in k_paths:
             path:Path = Path(p, k_paths[p])
