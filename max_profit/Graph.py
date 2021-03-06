@@ -8,89 +8,13 @@ import copy
 
 import config
 from DataCenter import DataCenter
-from Singleton import Singleton
-from Manager import manager
+from Manager import Manager
 
 
-class Graph(metaclass=Singleton):
+class Graph(object):
     def __init__(self) -> None:
         super().__init__()
-        self.graph = dict() # 元素结构为 node:{node:[weight,bandwidth],...}
-        self.make_graph()
-
-    def make_graph(self)->None:
-        self.graph = config.GRAPH
-
-    def checkCircle(self,path:tuple):
-        nodes = set()
-        for i in path:
-            if i in nodes:
-                return True
-            else:
-                nodes.add(i)
-        return False
-
-    def getMinDistancesIncrement(self, inputList:list):
-        inputList.sort()
-        lenList = [v[0] for v in inputList]
-        minValue = min(lenList)
-        minValue_index = lenList.index(minValue)
-        # minPath应为一个数组
-        # 因此inputList中的元素结构为 [距离，[路径]]
-        minPath = copy.deepcopy([v[1] for v in inputList][minValue_index])
-        return minValue, minPath, minValue_index
-
-    # 先允许有环，找出k条最短路
-    # 然后将有环的删除
-    def k_shortest_paths(self,start, finish, k = 3):
-        '''
-        :param start: 起始点
-        :param finish: 终点
-        :param k: 给出需要求的最短路数
-        :return: 返回K最短路和最短路长度
-        该算法重复计算了最短路，调用get_shortest_path()方法只是用到了起始点到其他所有点的最短距离和最短路长度
-        '''
-        distances, _, shortestPathLen = self.get_shortest_path(start, finish)
-        num_shortest_path = 0
-        paths = dict()
-        distancesIncrementList = [[0, [finish]]]
-        while len(paths) < k:
-            path = []
-            #distancesIncrementList = self.deleteCirclesWithEndpoint(distancesIncrementList,finish)
-            minValue, minPath, minIndex = self.getMinDistancesIncrement(distancesIncrementList)
-            min_vertex = minPath[-1]
-            distancesIncrementList.pop(minIndex)
- 
-            if min_vertex == start:
-                path.append(minPath[::-1])
-                num_shortest_path += 1
-                # type(path) -> list,不能作为字典的key
-                # 由于list不可哈希，因此转换成元组
-                paths[tuple(path[0])] = minValue + shortestPathLen
-                # 字典采用{path ; pathlen}这样的键值对，不能使用{pathlen:path}
-                # 因为key是唯一的，所以在此相同长度的path只能保存一个，后来的会覆盖前面的
-                # paths[minValue + shortestPathLen] = path
-                continue
-            for neighbor in self.graph[min_vertex]:
-                incrementValue:list = minPath
-                increment = 0
-                if neighbor == finish:
-                    # 和函数deleteCirclesWithEndpoint()作用一样
-                    continue
-                if distances[min_vertex] == (distances[neighbor] + self.graph[min_vertex][neighbor]):
-                    increment = minValue
-                elif distances[min_vertex] < (distances[neighbor] + self.graph[min_vertex][neighbor]):
-                    increment = minValue + distances[neighbor] + self.graph[min_vertex][neighbor] - distances[min_vertex]
-                elif distances[neighbor] == (distances[min_vertex] + self.graph[min_vertex][neighbor]):
-                    increment = minValue + 2 * self.graph[min_vertex][neighbor]
-                temp = copy.deepcopy(incrementValue)
-                temp.append(neighbor)
-                distancesIncrementList.append([increment, temp])
-        for p in list(paths.keys()):
-            if self.checkCircle(p):
-                paths.pop(p)
-        return paths
-
+        self.graph = config.GRAPH # 元素结构为 node:{node:[weight,bandwidth],...}
 
     def get_shortest_path(self, start, end) -> int and list and int:
         # distances使用字典的方式保存每一个顶点到startpoint点的距离
@@ -148,21 +72,4 @@ class Graph(metaclass=Singleton):
                             node[0] = dis
                             break
                     heapq.heapify(nodes)
-        return distances, shortest_path, lenPath
-
-if __name__ == '__main__':
-    g = Graph()
-    
-    start = 1
-    end = 5
-    k = 10
-    distances, shortestPath, shortestPathLen = g.get_shortest_path(start, end)
-    print('{}->{}的最短路径是：{}，最短路径为：{}'\
-        .format(start, end, shortestPath, shortestPathLen))
-
-    paths = g.k_shortest_paths(start, end, k)
-    print('\n求得的 {}-->{} 的 {}-最短路 分别是：'.format(start, end, k))
-    index = 1
-    for path, length in paths.items():
-        print('{}:{} 最短路长度：{}'.format(index, path, length))
-        index += 1
+        return shortest_path, lenPath
