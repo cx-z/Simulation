@@ -22,7 +22,6 @@ def cmp(x, y):
     else:
         return 1
 
-cnt = 0
 class Caculator:
     def __init__(self) -> None:
         super().__init__()
@@ -37,35 +36,35 @@ class Caculator:
     def calculate_hardware(self) -> None:
         for req in manager.requests:
             self.choose_path(req)
-        print("1 {} qualified".format(cnt))
         paths = self.paths_pair.values()
         paths = list(paths)
         for p in paths:
             self.path_weight(p)
         paths = sorted(paths, key=lambda p: -p.weight)
+        temp_reqs = set()
         for p in paths:
             p: Path
             # print("{}'s weight is {}".format(p.vec, p.weight))
-            for req in manager.requests:
+            for req in p.requests:
                 req:Request
+                if req in temp_reqs:
+                    continue
+                temp_reqs.add(req)
                 if p.vec not in req.path_vec or len(req.path_vec) <= 1:
                     continue
                 self.del_edgecount(p.vec, req)
                 self.del_node(p.vec, req)
-        
-        r_num = 0
+
         for node in manager.nodes.values():
             node:DataCenter
             if len(node.requests) > 0:
                 self.nodes.add(node)
-                r_num += len(node.requests)
-            self.get_node_cost(node)
-        print(r_num)
+                self.get_node_cost(node)
         for e in manager.edges.values():
-            e:Request
+            e: Edge
             if len(e.requests) > 0:
                 self.edges.add(e)
-            self.get_edge_cost(e)
+                self.get_edge_cost(e)
 
     def get_node_cost(self, node: DataCenter):
         node.cpu = 0
@@ -105,15 +104,12 @@ class Caculator:
         return False
 
     # 返回目标路径
-    def choose_path(self, req: Request) -> tuple:
-        global cnt
-        L_i = dict()
-        P_i = set()
+    def choose_path(self, req: Request):
         for node in manager.nodes.values():
             node: DataCenter
-            pre_half, pre_delay = Graph().get_shortest_path(req.src, node.id)
+            _,pre_half, pre_delay = Graph().get_shortest_path(req.src, node.id)
             pre_half = pre_half[::-1]
-            second_half, second_delay = Graph().get_shortest_path(node.id, req.dst)
+            _,second_half, second_delay = Graph().get_shortest_path(node.id, req.dst)
             second_half = second_half[::-1]
             path_vec = pre_half + second_half[1:]
             path_vec = tuple(path_vec)
@@ -129,8 +125,6 @@ class Caculator:
                 path: Path = self.paths_pair[path_vec]
                 if not self.check_constraints(req, path, node):
                     continue
-            node.cpu += req.process_source[node.id]
-        cnt += 1
 
     # 计算每条可用路径的选择权重
     def path_weight(self, path: Path) -> None:
@@ -144,21 +138,13 @@ class Caculator:
             e: Edge
             # C_e += e.cost - self.link_gain(e)
             C_e += e.cost
-        path.weight = path.bid / (C_v + C_e)
+        path.weight = len(path.requests) / (C_v + C_e)
 
     def check_constraints(self, req: Request, path: Path, node: DataCenter) -> bool:
         # 检查时延
         if path.propagation_delay >= req.maxDelay:
             # print("req_id {} failed because delay".format(req.id))
             # print("maxDelay = {}, pdealy = {}".format(req.maxDelay, path.propagation_delay))
-            return False
-        # 检查带宽费用是否亏本
-        band_cost = 0
-        for e in path.edges:
-            e: Edge
-            band_cost += e.unitprice*req.bandwidth
-        if band_cost >= req.bid:
-            # print("req_id {} failed because bandcost".format(req.id))
             return False
         # 处理时延
         process_delay = min(
@@ -169,33 +155,17 @@ class Caculator:
         for vnf in req.sfc:
             process_source += config.VNF_DELAY[vnf]
         process_source *= 1/process_delay
-        # 判断是否有足够算力和最低算力开销
-        profit: float = req.bid - band_cost - node.unitCpuPrice*process_source
+        # 判断是否有足够算力
         # 没有可部署的节点，返回False
-        if profit > 0:
-            req.process_source[node.id] = process_source
-            node.cpu += process_source
-            node.requests.add(req)
-            req.path_vec.add(path.vec)
-            for e in path.edges:
-                e: Edge
-                e.cost += req.bandwidth*e.unitprice
-                manager.edges[e.id].requests.add(req)
-            return True
-        else:
-            # print("req_id {} failed because profit".format(req.id))
-            return False
-
-    def correlation(self, old_seq, new_seq) -> float:
-        molecular: float = 0
-        x = 0
-        y = 0
-        for i in len(old_seq):
-            molecular += old_seq[i]*new_seq[i]
-            x += old_seq[i]*old_seq[i]
-            y += new_seq[i]*new_seq[i]
-        denominator: float = x**0.5 + y**0.5
-        return molecular/denominator
+        req.process_source[node.id] = process_source
+        node.requests.add(req)
+        req.path_vec.add(path.vec)
+        path.requests.add(req)
+        for e in path.edges:
+            e: Edge
+            e.cost += req.bandwidth*e.unitprice
+            manager.edges[e.id].requests.add(req)
+        return True
 
     def link_gain(self, e: Edge) -> float:
         if len(e.requests) == 0:
@@ -232,20 +202,20 @@ class Caculator:
         e_ids = set()
         for i in range(len(pj)-1):
             e_ids.add((pj[i],pj[i+1]))
+            e_ids.add((pj[i+1],pj[i]))
         for e in manager.edges.values():
-            e:Edge
+            e: Edge
             if e.id not in e_ids:
                 if req in e.requests:
                     e.requests.remove(req)
             else:
                 e.requests.add(req)
 
-
     def del_node(self, pj: tuple, req:Request):
         target_node = -1
         for i in pj:
             if req in manager.nodes[i].requests:
-                if target_node == -1 or manager.nodes[i].cost >= manager.nodes[target_node].cost:
+                if target_node == -1 or len(manager.nodes[i].requests) >= len(manager.nodes[target_node].requests):
                     target_node = i
         for node in manager.nodes.values():
             if req in node.requests and node.id != target_node:

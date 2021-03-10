@@ -6,21 +6,28 @@ from Request import Request
 from DataCenter import DataCenter
 from Manager import manager
 from Caculator import Caculator
-from Contrast import Contrast
+from Contrast2 import Contrast2
+from Contrast1 import Contrast1
 
 
 class Shop:
-    def __init__(self) -> None:
+    def __init__(self, i) -> None:
         super().__init__()
         self.profit = 0
         self.requests = list()
         self.edges = list() # 需要购买的链路
         self.nodes = list() # 需要购买的数据中心
+        if i == 0:
+            self.caculator = Caculator()
+        elif i == 1:
+            self.caculator = Contrast1()
+        else:
+            self.caculator = Contrast2()
 
     # 一个死循环的线程，负责接受用户的请求、计算是否接受请求以及请求的部署方案，并进行回复
-    def sale(self)->float:
+    def sale(self)->float and int and int:
         self.input_requests()
-        return self.caculate_cost()
+        return self.caculate_cost(),len(self.caculator.nodes),len(self.caculator.edges)
 
     # 从文件中读取请求
     def input_requests(self)->None:
@@ -37,54 +44,43 @@ class Shop:
             req.src = int(line[1])
             req.dst = int(line[2])
             req.bandwidth = int(line[3])
-            req.bid = int(line[4])
             bid += req.bid
-            req.maxDelay = int(line[5])
-            req.sfc = line[6:-1]
+            req.maxDelay = int(line[4])
+            req.sfc = line[5:-1]
             # 第二行为流量序列
             seq = lines[i+1].split(" ")
             for j in range(len(seq)-1):
                 req.bandSeq.append(int(seq[j]))
             manager.requests.add(req)
             i += 2
-        print("total bid is " + str(bid))
+
             
     # 调用类Caculator的calculate_profit函数计算利润和应部署的节点
     # 此函数计算完利润后，需要修改req的属性，包括req.sfc里各个VNF的属性
     def caculate_cost(self)->float:
-        caculator = Caculator()
-        cost1 = 0
-        caculator.calculate_hardware()
+        cost = 0
+        self.caculator.calculate_hardware()
         # print(len(caculator.nodes))
         min_node_cost = sys.maxsize
         max_node_cost = 0
-        # for node in caculator.nodes:
+        for node in self.caculator.nodes:
         #     min_node_cost = min(min_node_cost,node.cost)
-        #     max_node_cost = max(max_node_cost,node.cost)
-        for node in caculator.nodes:
-            cost1 += node.cost*self.node_discount(node)
+            max_node_cost = max(max_node_cost,node.cost)
+        for node in self.caculator.nodes:
+            cost += node.cost*self.node_discount(node)
         # print("min_node_cost" + str(min_node_cost))
         # print("max_node_cost" + str(max_node_cost))
-        print("nodes cost1 " + str(cost1))
         min_edge_cost = sys.maxsize
         max_edge_cost = 0
-        # for edge in caculator.edges:
+        for edge in self.caculator.edges:
         #     min_edge_cost = min(min_edge_cost,edge.cost)
-        #     max_edge_cost = max(max_edge_cost,edge.cost)
+            max_edge_cost = max(max_edge_cost,edge.cost)
         # print(len(caculator.edges_pair))
-        for edge in caculator.edges:
-            cost1 += edge.cost*self.edge_discount(edge)
+        for edge in self.caculator.edges:
+            cost += edge.cost*self.edge_discount(edge)
         # print("min_edge_cost" + str(min_edge_cost))
         # print("max_edge_cost" + str(max_edge_cost))
-        contrast = Contrast()
-        cost2 = 0
-        contrast.calculate_hardware()
-        for node in contrast.nodes.values():
-            cost2 += node.cost*self.node_discount(node)
-        print("nodes cost2 " + str(cost2))
-        for edge in contrast.edges.values():
-            cost2 += edge.cost*self.edge_discount(edge)
-        return cost1, cost2
+        return cost
 
     def edge_discount(self, edge:Edge)->float:
         keys = config.Edge_Discount.keys()

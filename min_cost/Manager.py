@@ -29,24 +29,12 @@ class Manager(metaclass = Singleton):
     # 从self.edges中读取某链接的信息
     def load_edges_info(self):
         for key in config.Edge_UnitPrice:
-            print(key)
             id = key
             e = Edge(id[0],id[1],0,config.Edge_UnitPrice[id])
             self.edges[id] = e
+            self.edges[(id[1],id[0])] = e
         for ed1 in config.GRAPH:
             for ed2 in config.GRAPH[ed1]:
                 self.edges[(ed1,ed2)].propagationDelay = config.GRAPH[ed1][ed2]
-
-    # 向self.requests中插入新上线的请求
-    def insert_request_info(self, req: Request) -> None:
-        self.requests[req.id] = req
-
-    # 从self.requests中读取某个在线的请求信息
-    def load_request_info(self, req_id: int) -> Request:
-        return self.requests[req_id]
-
-    # 从self.requests中删除下线的请求
-    def del_request_info(self, req: Request) -> None:
-        self.requests.pop(req.id)
 
 manager = Manager()

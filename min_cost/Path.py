@@ -30,8 +30,12 @@ class Path:
             self.nodes.append(node)
 
     def init_edges(self, path:tuple):
+        # print(path)
         for i in range(len(path)-1):
             e = manager.edges[(path[i],path[i+1])]
             self.edges.append(e)
         # print("{}'s edges is {}".format(self.vec, len(self.edges)))
-
+        if self.propagation_delay <= 0:
+            for e in self.edges:
+                e:Edge
+                self.propagation_delay += e.propagationDelay
