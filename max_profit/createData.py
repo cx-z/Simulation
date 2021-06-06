@@ -20,9 +20,11 @@ def make_sfc()->list:
 # 生成请求信息并写在requests.txt文件中
 # 参数为打算生成的请求数
 def req_info(cnt:int)->None:
-    try:
-        os.system("rm requests.txt")
-    except:
+    # try:
+    #     os.system("rm requests.txt")
+    # except:
+    #     pass
+    with open('requests.txt', 'w') as f:
         pass
     for i in range(cnt):
         id = i # id
@@ -30,16 +32,16 @@ def req_info(cnt:int)->None:
         dst = random.randint(0,13) # dst
         while dst == src:
             dst = random.randint(0,13)
-        band = random.randint(1,10) # bandwidth
-        maxDelay = random.randint(10,30)*1000
-        ontime = random.randint(0,80) # 上线时间
-        offtime = ontime + random.randint(10,20)
-        bid = random.randint(1,5)*band*100*(offtime-ontime) # 用户出价
+        band = random.randint(1,5) # bandwidth
+        maxDelay = random.randint(10,20)*300
+        ontime = 0 #random.randint(0,80) # 上线时间
+        offtime = 99 #ontime + random.randint(10,20)
+        bid = random.randint(1,5)*band*200*(offtime-ontime) # 用户出价
         sfc = make_sfc()
         line1 = "{} {} {} {} {} {} {} {} "\
             .format(str(id),str(src),str(dst),str(band),str(bid),str(maxDelay),str(ontime),str(offtime))
         for v in sfc:
             line1 += v + " "
-        with open('requests.txt','a+') as f:    #设置文件对象
+        with open('requests.txt','a+') as f:    # 设置文件对象
             f.write(line1+'\n')
         

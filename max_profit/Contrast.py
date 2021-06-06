@@ -1,14 +1,12 @@
-#-*-coding:utf-8-*-
-
 # -*-coding:utf-8 -*-
 """
 本文件负责计算请求的部署节点以及利润
 """
-import sys
+from enum import Flag
+from os import pipe
 import config
-import copy
 
-from Manager import manager
+from Manager import Manager
 from DataCenter import DataCenter
 from Request import Request
 from Edge import Edge
@@ -17,157 +15,119 @@ from Path import Path
 
 
 def cmp(x, y):
-    if x < y:
+    if x<y:
         return -1
-    elif x == y:
+    elif x==y:
         return 0
     else:
         return 1
 
-cnt = 0
 class Contrast:
     def __init__(self) -> None:
         super().__init__()
-        self.nodes = dict()  # 最后得到的所需节点
-        self.edges = dict()  # 最后得到的所需链路<链路名：Edge实例>
-
+        
     # 计算请求的利润和部署的节点
     # 如果利润不为正，部署节点为0
-    def calculate_hardware(self) -> None:
-        for req in manager.requests:
-            self.choose_path(req)
-        print("2 {} qualified".format(cnt))
-        for node in self.nodes.values():
-            self.get_node_cost(node)
-        for e in self.edges.values():
-            e: Edge
-            self.get_edge_cost(e)
-
-    def get_node_cost(self, node: DataCenter):
-        node.cpu = 0
-        node.cost = 0
-        if len(node.requests) == 0:
-            return
-        for r in node.requests:
-            r: Request
-            node.cpu += r.process_source[node.id]
-        node.cost = node.cpu * node.unitCpuPrice
-        gain = self.node_gain(node)
-        node.cpu *= (1-gain/node.cost)
-        node.cost -= gain
-
-    def get_edge_cost(self, edge: Edge):
-        edge.bandWidth = 0
-        edge.cost = 0
-        if len(edge.requests) == 0:
-            return
-        for r in edge.requests:
-            r: Request
-            edge.bandWidth += r.bandwidth
-        edge.cost = edge.bandWidth * edge.unitprice
-        gain = self.link_gain(edge)
-        edge.bandWidth *= (1-gain/edge.cost)
-        edge.cost -= gain
-
-    # 判断是否存在环
-    def has_circle(self, vec:tuple):
-        points = set()
-        for i in vec:
-            if i not in points:
-                points.add(i)
-            else:
-                return True
-        return False
+    def calculate_profit(self,req:Request)->float:
+        path:Path = self.choose_path(req)
+        if not path:
+            return 0
+        node:DataCenter = self.choose_node(req, path)
+        return path.profit
 
     # 返回目标路径
-    def choose_path(self, req: Request) -> tuple:
-        path_vec, delay = Graph().get_shortest_path(req.src, req.dst)
-        path_vec = path_vec[::-1]
-        node_id = path_vec[0]
-        for i in path_vec:
-            if manager.nodes[node_id].unitCpuPrice > manager.nodes[i].unitCpuPrice:
-                node_id = i
-        node:DataCenter = manager.nodes[node_id]
-        path = Path(path_vec, delay)
-        # if not self.check_constraints(req, path, node):
-        #     return
-        self.check_constraints(req,path,node)
-        node.requests.add(req)
-        self.nodes[node_id] = node
-        for i in range(len(path_vec)-1):
-            e: Edge = manager.edges[(path_vec[i],path_vec[i+1])]
-            e.requests.add(req)
-            self.edges[e.id] = e
+    def choose_path(self,req:Request) -> Path:
+        k_paths:dict = Graph().k_shortest_paths(req.src, req.dst, 1)
+        paths = list()
+        for p in k_paths:
+            path:Path = Path(p, k_paths[p])
+            if self.check_constraints(req, path):
+                paths.append(path)
+        if len(paths) == 0:
+            return None
+        for p in paths:
+            self.path_weight(req, p)
+        target_path:Path = paths[0]
+        for p in paths:
+            p:Path
+            if p.weight > target_path.weight:
+                target_path = p
+        req.path_vec = target_path.vec
+        return target_path
+        
+    # 计算每条可用路径的选择权重
+    def path_weight(self, req:Request, path:Path)->None:
+        # path的最后两项是带宽成本和贪心利润
+        min_band_edge:Edge = path.edges[0]
+        for e in path.edges:
+            e:Edge
+            if e.leftBand < min_band_edge.leftBand:
+                min_band_edge = e
+        path.weight += path.greedy_profit # 贪心利润
+        if min_band_edge.charge == 0:
+            return 
+        path.weight += (req.unitBid/(req.offtime-req.ontime)/len(path.edges)\
+            *(min_band_edge.maxBand-min_band_edge.leftBand)\
+            /min_band_edge.charge/req.bandwidth-1)\
+            *min_band_edge.leftBand
 
-    def check_constraints(self, req: Request, path: Path, node: DataCenter) -> bool:
-        global cnt
+    # 从目标路径中选择部署节点
+    # 此处输入的path最后三项依次是band_cost、greedy_profit和路径权重
+    def choose_node(self,req:Request, path:Path)->DataCenter:
+        # 首先计算部署在每个节点上的利润
+        for node in path.nodes:
+            node:DataCenter
+            node.weight += req.unitBid-path.band_cost-node.unitCpuPrice*path.process_source
+            if node.charge == 0:
+                continue
+            node.weight += ((req.unitBid-path.band_cost)*(1-node.leftCpu)/node.charge/path.process_source-1)\
+                *node.leftCpu
+        target_node:DataCenter = path.nodes[0]
+        for node in path.nodes:
+            if node.weight > target_node.weight:
+                target_node = node
+        path.profit = (req.unitBid - path.band_cost - target_node.unitCpuPrice*path.process_source)*(req.offtime-req.ontime)
+        target_node.leftCpu -= path.process_source
+        target_node.charge += req.unitBid - path.band_cost
+        req.node_id = target_node.id
+        return target_node
+
+    def check_constraints(self,req:Request, path:Path)->bool:
         # 检查时延
         if path.propagation_delay >= req.maxDelay:
-            # print("req_id {} failed because delay".format(req.id))
-            # print("maxDelay = {}, pdealy = {}".format(req.maxDelay, path.propagation_delay))
+            # print("req {} and {} failed because of delay".format(req.id, path.vec))
             return False
-        # 检查带宽费用是否亏本
-        band_cost = 0
+        # 检查带宽和带宽费用
         for e in path.edges:
-            e: Edge
-            band_cost += e.unitprice*req.bandwidth
-        if band_cost >= req.bid:
-            # print("req_id {} failed because bandcost".format(req.id))
+            e:Edge
+            if e.leftBand < req.bandwidth:
+                # print("req {} and {} failed because of band".format(req.id, path.vec))
+                # print("req {}'s band is {}".format(req.id,req.bandwidth))
+                # print("edge {}'s band is {}".format(e.id,e.leftBand))
+                return False
+            path.band_cost += e.unitprice*req.bandwidth
+        if path.band_cost >= req.unitBid:
+            # print("req {} and {} failed because of band_cost".format(req.id, path.vec))
             return False
         # 处理时延
-        process_delay = min(
-            req.maxDelay - path.propagation_delay, len(req.sfc)*req.bandwidth)
+        path.process_delay = min((req.maxDelay - path.propagation_delay)/1000, len(req.sfc)*req.bandwidth)
         # 判断算力是否满足条件
         # 所需最低算力
-        process_source = 0
         for vnf in req.sfc:
-            process_source += config.VNF_DELAY[vnf]
-        process_source *= 1/process_delay
+            path.process_source += config.VNF_DELAY[vnf]
+        path.process_source *= req.bandwidth#len(req.sfc)/path.process_delay
         # 判断是否有足够算力和最低算力开销
-        profit: float = req.bid - band_cost - node.unitCpuPrice*process_source
+        for node in path.nodes:
+            node:DataCenter
+            # 判断节点剩余算力是否足够部署sfc
+            if node.leftCpu < path.process_source:
+                continue
+            # 判断在该节点部署SFC是否亏本
+            profit = req.unitBid - path.band_cost - node.unitCpuPrice*path.process_source
+            if profit <= 0:
+                # print("req {} and {} failed because of profit".format(req.id, path.vec))
+                continue
+            # 上述两个条件都满足，表示可以在该路径部署，计算或更新贪心利润
+            path.greedy_profit = max(profit, path.greedy_profit)
         # 没有可部署的节点，返回False
-        # if profit > 0:
-        req.process_source[node.id] = process_source
-        # if req.id == 63:
-        #     print("req63's node is {}".format(node.id))
-        node.requests.add(req)
-        node.cost += node.unitCpuPrice*req.process_source[node.id]
-        for e in path.edges:
-            e: Edge
-            e.cost += req.bandwidth*e.unitprice
-        cnt += 1
-        return True
-        # else:
-        #     # print("req_id {} failed because profit".format(req.id))
-        #     return False
-
-    def link_gain(self, e: Edge) -> float:
-        if len(e.requests) == 0:
-            return 0
-        multiplex_seq = [0 for _ in range(config.DURATION)]
-        maxband = 0
-        for r in e.requests:
-            r: Request
-            for i in range(config.DURATION):
-                multiplex_seq[i] += r.bandSeq[i]
-            maxband += r.bandwidth
-        gain_band = sys.maxsize
-        for i in range(config.DURATION):
-            gain_band = min(gain_band, maxband-multiplex_seq[i])
-        return gain_band*e.unitprice
-
-    def node_gain(self, v: DataCenter) -> float:
-        if len(v.requests) == 0:
-            return 0
-        multiplex_seq = [0 for _ in range(config.DURATION)]
-        maxband = 0
-        for r in v.requests:
-            r: Request
-            for i in range(config.DURATION):
-                multiplex_seq[i] += r.bandSeq[i]
-            maxband += r.bandwidth
-        gain_band = sys.maxsize
-        for i in range(config.DURATION):
-            gain_band = min(gain_band, maxband-multiplex_seq[i])
-        # print("maxband: {} gainband: {}".format(maxband, gain_band))
-        return gain_band/maxband*v.cost
+        return path.greedy_profit > 0

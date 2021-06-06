@@ -32,15 +32,26 @@ class Contrast2:
         if not path:
             return 0
         node:DataCenter = self.choose_node(req, path)
+        for e in path.edges:
+            e:Edge
+            e.leftBand -= req.bandwidth
         return path.profit
+
+    def get_path_delay(self, path:Path):
+        for e in path.edges:
+            e:Edge
+            path.propagation_delay += e.propagationDelay
 
     # 返回目标路径
     def choose_path(self,req:Request)->Path:
-        k_paths:dict = Graph().k_shortest_paths(req.src, req.dst, 1)
+        g = Graph()
+        g.graph = config.Price_Graph
+        k_paths:dict = g.k_shortest_paths(req.src, req.dst, 5)
         paths = list()
         for p in k_paths:
-            path:Path = Path(p, k_paths[p])
-            if self.check_constraints(req, path):
+            path:Path = Path(p, 0)
+            self.get_path_delay(path)
+            if self.check_constraints(req, path, g):
                 paths.append(path)
                 break
         if len(paths) == 0:
@@ -65,11 +76,7 @@ class Contrast2:
                 min_band_edge = e
         path.weight += path.greedy_profit # 贪心利润
         if min_band_edge.charge == 0:
-            return 
-        path.weight += (req.unitBid/(req.offtime-req.ontime)/len(path.edges)\
-            *(min_band_edge.maxBand-min_band_edge.leftBand)\
-            /min_band_edge.charge/req.bandwidth-1)\
-            *min_band_edge.leftBand
+            return
 
     # 从目标路径中选择部署节点
     # 此处输入的path最后三项依次是band_cost、greedy_profit和路径权重
@@ -80,8 +87,6 @@ class Contrast2:
             node.weight += req.unitBid-path.band_cost-node.unitCpuPrice*path.process_source
             if node.charge == 0:
                 continue
-            node.weight += ((req.unitBid-path.band_cost)*(1-node.leftCpu)/node.charge/path.process_source-1)\
-                *node.leftCpu
         target_node:DataCenter = path.nodes[0]
         for node in path.nodes:
             if node.weight > target_node.weight:
@@ -92,7 +97,7 @@ class Contrast2:
         req.node_id = target_node.id
         return target_node
 
-    def check_constraints(self,req:Request, path:Path)->bool:
+    def check_constraints(self,req:Request, path:Path, g:Graph)->bool:
         # 检查时延
         if path.propagation_delay >= req.maxDelay:
             # print("req {} and {} failed because of delay".format(req.id, path.vec))
@@ -101,7 +106,8 @@ class Contrast2:
         for e in path.edges:
             e:Edge
             if e.leftBand < req.bandwidth:
-                # print("req {} and {} failed because of band".format(req.id, path.vec))
+                g.graph[e.id[0]][e.id[1]] = 100000
+                # print("req {} and {} failed because of bandwidth".format(req.id, path.vec))
                 # print("req {}'s band is {}".format(req.id,req.bandwidth))
                 # print("edge {}'s band is {}".format(e.id,e.leftBand))
                 return False
@@ -110,12 +116,14 @@ class Contrast2:
             # print("req {} and {} failed because of band_cost".format(req.id, path.vec))
             return False
         # 处理时延
-        path.process_delay = min(req.maxDelay - path.propagation_delay, len(req.sfc)*req.bandwidth)
+        if req.maxDelay - path.propagation_delay  - len(req.sfc)*1000/req.bandwidth< 0:
+            # print("req {} and {} failed because of delay".format(req.id, path.vec))
+            return False
         # 判断算力是否满足条件
         # 所需最低算力
         for vnf in req.sfc:
             path.process_source += config.VNF_DELAY[vnf]
-        path.process_source *= 1/path.process_delay
+        path.process_source *= req.bandwidth
         # 判断是否有足够算力和最低算力开销
         for node in path.nodes:
             node:DataCenter
