@@ -16,5 +16,4 @@ class DataCenter:
         self.neighbors = list()  # 此节点的邻接节点
         self.weight:float = 0
         self.requests = set()  # 当前在此节点运行的服务和复用增益<请求，增益>
-        self.multiplexing_gain: float = 0
-        self.discount:float = 0
+        self.gain = 0

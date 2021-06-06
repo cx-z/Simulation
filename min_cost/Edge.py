@@ -16,3 +16,4 @@ class Edge:
         self.usecount:int = 0
         self.multiplex_gain:float = 0
         self.discount:float = 0
+        self.gain = 0

@@ -34,8 +34,11 @@ class Contrast2:
     def calculate_hardware(self) -> None:
         for req in manager.requests:
             self.choose_path(req)
+        num = 0
         for node in self.nodes:
+            num += len(node.requests)
             self.get_node_cost(node)
+        print("nodes deploy {} requests".format(num))
         for e in self.edges:
             e: Edge
             self.get_edge_cost(e)
@@ -47,7 +50,7 @@ class Contrast2:
             return
         for r in node.requests:
             r: Request
-            node.cpu += r.process_source[node.id]
+            node.cpu += r.process_source
         node.cost = node.cpu * node.unitCpuPrice
         gain = self.node_gain(node)
         node.cpu *= (1-gain/node.cost)
@@ -78,43 +81,62 @@ class Contrast2:
 
     # 返回目标路径
     def choose_path(self, req: Request):
-        _,path_vec, delay = Graph().get_shortest_path(req.src, req.dst)
-        path_vec = path_vec[::-1]
-        node_id = path_vec[0]
-        for i in path_vec:
-            if manager.nodes[node_id].unitCpuPrice > manager.nodes[i].unitCpuPrice:
-                node_id = i
-        node:DataCenter = manager.nodes[node_id]
-        path = Path(path_vec, delay)
-        self.check_constraints(req,path,node)
-        node.requests.add(req)
-        self.nodes.add(node)
-        for i in range(len(path_vec)-1):
-            e: Edge = manager.edges[(path_vec[i],path_vec[i+1])]
+        paths_pair = dict() # key:value  路径向量：路径对象
+        for node in manager.nodes.values():
+            node: DataCenter
+            _,pre_half, pre_delay = Graph().get_shortest_path(req.src, node.id)
+            pre_half = pre_half[::-1]
+            _,second_half, second_delay = Graph().get_shortest_path(node.id, req.dst)
+            second_half = second_half[::-1]
+            path_vec = pre_half + second_half[1:]
+            path_vec = tuple(path_vec)
+            if self.has_circle(path_vec):
+                continue
+            # print("src = " + str(req.src) + " dst = "+ str(req.dst))
+            if path_vec not in paths_pair:
+                path = Path(path_vec, pre_delay + second_delay)
+                if not self.check_constraints(req, path, node):
+                    continue
+                paths_pair[path_vec] = path
+        target_path: Path = list(paths_pair.values())[0]
+        for p in paths_pair.values():
+            p: Path
+            if p.weight > target_path.weight:
+                target_path = p
+        for e in target_path.edges:
+            e: Edge
             e.requests.add(req)
             self.edges.add(e)
+        target_v: DataCenter = target_path.nodes[0]
+        for v in target_path.nodes:
+            v: DataCenter
+            if v.unitCpuPrice < target_v.unitCpuPrice:
+                target_v = v
+        target_v.requests.add(req)
+        self.nodes.add(target_v)
 
     def check_constraints(self, req: Request, path: Path, node: DataCenter) -> bool:
         # 检查时延
         if path.propagation_delay >= req.maxDelay:
-            print("req_id {} failed because delay".format(req.id))
-            print("maxDelay = {}, pdealy = {}".format(req.maxDelay, path.propagation_delay))
+            # print("req_id {} failed because delay".format(req.id))
+            # print("maxDelay = {}, pdealy = {}".format(req.maxDelay, path.propagation_delay))
             return False
-        # 处理时延
-        process_delay = min(
-            req.maxDelay - path.propagation_delay, len(req.sfc)*req.bandwidth)
-        # 判断算力是否满足条件
         # 所需最低算力
+        # print("+++++++++++++++")
+        # print((req.maxDelay - path.propagation_delay) / 1000)
+        # print(len(req.sfc) / req.bandwidth)
+        # print("+++++++++++++++")
         process_source = 0
         for vnf in req.sfc:
             process_source += config.VNF_DELAY[vnf]
-        process_source *= 1/process_delay
+        process_source *= req.bandwidth
         # 判断是否有足够算力和最低算力开销
-        req.process_source[node.id] = process_source
-        node.requests.add(req)
+        req.process_source = process_source
+        path.weight = node.unitCpuPrice * req.process_source
         for e in path.edges:
             e: Edge
-            e.requests.add(req)
+            path.weight += e.unitprice*req.bandwidth
+        path.weight = 1/path.weight
         return True
 
     def link_gain(self, e: Edge) -> float:
@@ -146,4 +168,4 @@ class Contrast2:
         for i in range(config.DURATION):
             gain_band = min(gain_band, maxband-multiplex_seq[i])
         # print("maxband: {} gainband: {}".format(maxband, gain_band))
-        return gain_band/maxband*v.cost
+        return gain_band*v.unitCpuPrice

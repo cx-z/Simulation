@@ -31,6 +31,7 @@ class Manager(metaclass = Singleton):
         for key in config.Edge_UnitPrice:
             id = key
             e = Edge(id[0],id[1],0,config.Edge_UnitPrice[id])
+            # e = Edge(id[0], id[1], 0, 1)
             self.edges[id] = e
             self.edges[(id[1],id[0])] = e
         for ed1 in config.GRAPH:

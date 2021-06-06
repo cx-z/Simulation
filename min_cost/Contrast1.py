@@ -36,10 +36,12 @@ class Contrast1:
     def calculate_hardware(self) -> None:
         for req in manager.requests:
             self.choose_path(req)
-
+        num = 0
         for node in self.nodes:
             node: DataCenter
             self.get_node_cost(node)
+            num += len(node.requests)
+        print("nodes deploy {} requests".format(num))
         for e in self.edges:
             e: Edge
             self.get_edge_cost(e)
@@ -51,7 +53,7 @@ class Contrast1:
             return
         for r in node.requests:
             r: Request
-            node.cpu += r.process_source[node.id]
+            node.cpu += r.process_source
         node.cost = node.cpu * node.unitCpuPrice
         gain = self.node_gain(node)
         node.cpu *= (1 - gain / node.cost)
@@ -140,18 +142,14 @@ class Contrast1:
             # print("req_id {} failed because delay".format(req.id))
             # print("maxDelay = {}, pdealy = {}".format(req.maxDelay, path.propagation_delay))
             return False
-        # 处理时延
-        process_delay = min(
-            req.maxDelay - path.propagation_delay, len(req.sfc) * req.bandwidth)
-        # 判断算力是否满足条件
         # 所需最低算力
         process_source = 0
         for vnf in req.sfc:
             process_source += config.VNF_DELAY[vnf]
-        process_source *= 1 / process_delay
+        process_source *= req.bandwidth
         # 判断是否有足够算力和最低算力开销
         # 没有可部署的节点，返回False
-        req.process_source[node.id] = process_source
+        req.process_source = process_source
         req.path_vec.add(path.vec)
         return True
 
@@ -171,7 +169,7 @@ class Contrast1:
 
     def link_gain(self, e: Edge) -> float:
         if len(e.requests) == 0:
-            return 0
+            return 1
         multiplex_seq = [0 for _ in range(config.DURATION)]
         maxband = 0
         for r in e.requests:
@@ -186,7 +184,7 @@ class Contrast1:
 
     def node_gain(self, v: DataCenter) -> float:
         if len(v.requests) == 0:
-            return 0
+            return 1
         multiplex_seq = [0 for _ in range(config.DURATION)]
         maxband = 0
         for r in v.requests:
@@ -198,4 +196,4 @@ class Contrast1:
         for i in range(config.DURATION):
             gain_band = min(gain_band, maxband - multiplex_seq[i])
         # print("maxband: {} gainband: {}".format(maxband, gain_band))
-        return gain_band / maxband * v.cost
+        return gain_band * v.unitCpuPrice

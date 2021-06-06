@@ -25,7 +25,7 @@ class Shop:
             self.caculator = Contrast2()
 
     # 一个死循环的线程，负责接受用户的请求、计算是否接受请求以及请求的部署方案，并进行回复
-    def sale(self)->float and int and int:
+    def sale(self)->float and int and int and float:
         self.input_requests()
         return self.caculate_cost(),len(self.caculator.nodes),len(self.caculator.edges)
 
@@ -54,45 +54,53 @@ class Shop:
             manager.requests.add(req)
             i += 2
 
+    def link_concentration(self)->float:
+        costs = []
+        total_cost = 0
+        for e in self.caculator.edges:
+            e:Edge
+            costs.append(e.cost)
+            total_cost += e.cost
+        costs.sort(reverse=True)
+        head = 0
+        for i in range(5):
+            head += costs[i]
+        return head/total_cost
             
     # 调用类Caculator的calculate_profit函数计算利润和应部署的节点
     # 此函数计算完利润后，需要修改req的属性，包括req.sfc里各个VNF的属性
     def caculate_cost(self)->float:
         cost = 0
         self.caculator.calculate_hardware()
-        # print(len(caculator.nodes))
-        min_node_cost = sys.maxsize
-        max_node_cost = 0
+        max_node_cpu = 0
         for node in self.caculator.nodes:
-        #     min_node_cost = min(min_node_cost,node.cost)
-            max_node_cost = max(max_node_cost,node.cost)
+            node:DataCenter
+            max_node_cpu = max(max_node_cpu,node.cpu)
         for node in self.caculator.nodes:
+            # print("node {} has {} requests".format(node.id,len(node.requests)))
             cost += node.cost*self.node_discount(node)
-        # print("min_node_cost" + str(min_node_cost))
-        # print("max_node_cost" + str(max_node_cost))
-        min_edge_cost = sys.maxsize
-        max_edge_cost = 0
+        print("max_node_cpu" + str(max_node_cpu))
+        max_edge_band = 0
         for edge in self.caculator.edges:
-        #     min_edge_cost = min(min_edge_cost,edge.cost)
-            max_edge_cost = max(max_edge_cost,edge.cost)
-        # print(len(caculator.edges_pair))
+            edge:Edge
+            max_edge_band = max(max_edge_band,edge.bandWidth)
         for edge in self.caculator.edges:
+            # print("edge {} has {} requests".format(edge.id, len(edge.requests)))
             cost += edge.cost*self.edge_discount(edge)
-        # print("min_edge_cost" + str(min_edge_cost))
-        # print("max_edge_cost" + str(max_edge_cost))
+        print("max_edge_band" + str(max_edge_band))
         return cost
 
     def edge_discount(self, edge:Edge)->float:
         keys = config.Edge_Discount.keys()
         keys = list(keys)
         keys.sort()
-        if edge.cost >= config.Edge_Discount[keys[3]]:
+        if edge.bandWidth >= config.Edge_Discount[keys[3]]:
             return config.Edge_Discount[keys[3]]
-        elif edge.cost >= config.Edge_Discount[keys[2]]:
+        elif edge.bandWidth >= config.Edge_Discount[keys[2]]:
             return config.Edge_Discount[keys[2]]
-        elif edge.cost >= config.Edge_Discount[keys[1]]:
+        elif edge.bandWidth >= config.Edge_Discount[keys[1]]:
             return config.Edge_Discount[keys[1]]
-        elif edge.cost >= config.Edge_Discount[keys[0]]:
+        elif edge.bandWidth >= config.Edge_Discount[keys[0]]:
             return config.Edge_Discount[keys[0]]
         else:
             return 1
@@ -101,13 +109,13 @@ class Shop:
         keys = config.Node_Discount.keys()
         keys = list(keys)
         keys.sort()
-        if node.cost >= config.Node_Discount[keys[3]]:
+        if node.cpu >= keys[3]:
             return config.Node_Discount[keys[3]]
-        elif node.cost >= config.Node_Discount[keys[2]]:
+        elif node.cpu >= keys[2]:
             return config.Node_Discount[keys[2]]
-        elif node.cost >= config.Node_Discount[keys[1]]:
+        elif node.cpu >= keys[1]:
             return config.Node_Discount[keys[1]]
-        elif node.cost >= config.Node_Discount[keys[0]]:
+        elif node.cpu >= keys[0]:
             return config.Node_Discount[keys[0]]
         else:
             return 1

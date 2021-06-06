@@ -14,13 +14,11 @@ class Path:
         self.nodes = list()
         self.edges = list()
         self.requests = set()
-        self.band:int = 0
-        self.band_cost:float = 0
-        self.cost:float = 0
+        # self.band:int = 0
+        # self.band_cost:float = 0
+        # self.cost:float = 0
         self.propagation_delay:int = delay
-        self.bid:float = 0
         self.weight:float = 0 # 路径选择权重
-        self.profit = 0 # 选定路径和节点后，最终的利润
         self.init_edges(path_vec)
         self.init_nodes(path_vec)
         

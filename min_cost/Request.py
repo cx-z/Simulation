@@ -12,7 +12,7 @@ class Request:
         self.bandSeq = list() # 流量大小序列
         self.bid:float = 0 # 此处的bid为单位时间的出价，因此计算总利润需要乘以offtime-ontime
         self.maxDelay:int = 0
-        self.process_source = dict() # 存储在各个节点上所需的算力
+        self.process_source = 0
         self.path_vec = set() # 路径集合
         self.node_id = -1
 

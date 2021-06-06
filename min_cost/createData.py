@@ -38,7 +38,7 @@ def req_info(cnt: int) -> None:
         while dst == src:
             dst = random.randint(0, 13)
         band = random.randint(1, 10)  # bandwidth
-        maxDelay = random.randint(10, 30) * 1000
+        maxDelay = random.randint(10, 20) * 500
         sfc = make_sfc()
         line1 = "{} {} {} {} {} " \
             .format(str(id), str(src), str(dst), str(band), str(maxDelay))
