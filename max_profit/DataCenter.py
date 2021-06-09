@@ -10,8 +10,6 @@ class DataCenter:
         self.id: int = id
         self.maxCpu: float = cpu
         self.leftCpu: float = cpu
-        self.mem: float = 0
-        # self.unitMemprice: int = unitMemPrice
         self.unitCpuPrice: int = unitCpuPrice
         self.charge = 0
         self.neighbors = list()  # 此节点的邻接节点

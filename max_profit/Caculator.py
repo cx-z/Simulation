@@ -34,8 +34,8 @@ class Caculator:
         for e in path.edges:
             e:Edge
             e.leftBand -= req.bandwidth
-            e.charge += req.bid/(req.offtime-req.ontime)
-        return path.profit
+            e.charge += req.profit/(req.offtime-req.ontime)
+        return req.profit
 
     # 返回目标路径
     def choose_path(self,req:Request)->Path:
@@ -87,32 +87,34 @@ class Caculator:
             e:Edge
             if e.leftBand < min_band_edge.leftBand:
                 min_band_edge = e
-        if min_band_edge.charge == 0:
-            return 
-        beta = (req.unitBid/(req.offtime-req.ontime)/len(path.edges)\
-            *(min_band_edge.maxBand-min_band_edge.leftBand)\
-            /min_band_edge.charge/req.bandwidth-1)\
-            *min_band_edge.leftBand/min_band_edge.maxBand
+        beta = min_band_edge.leftBand
+        # if min_band_edge.charge != 0:
+        #     beta *= (min_band_edge.maxBand-min_band_edge.leftBand)*path.greedy_profit \
+        #         /req.bandwidth/min_band_edge
+            # beta = (req.unitBid/(req.offtime-req.ontime)/len(path.edges)\
+            #     *(min_band_edge.maxBand-min_band_edge.leftBand)\
+            #     /min_band_edge.charge/req.bandwidth-1)\
+            #     *min_band_edge.leftBand/min_band_edge.maxBand
         path.weight = path.greedy_profit * beta
 
     # 从目标路径中选择部署节点
     # 此处输入的path最后三项依次是band_cost、greedy_profit和路径权重
     def choose_node(self,req:Request, path:Path)->DataCenter:
         # 首先计算部署在每个节点上的利润
+        alpha = 0
         for node in path.nodes:
             node:DataCenter
-            node.weight += req.unitBid-path.band_cost-node.unitCpuPrice*path.process_source
+            alpha = req.bid/(req.offtime-req.ontime)-path.band_cost-node.unitCpuPrice*req.process_source
             if node.charge == 0:
                 continue
-            node.weight += ((req.unitBid-path.band_cost)*(1-node.leftCpu)/node.charge/path.process_source-1)\
-                *node.leftCpu
+            node.weight = alpha * node.leftCpu
         target_node:DataCenter = path.nodes[0]
         for node in path.nodes:
             if node.weight > target_node.weight:
                 target_node = node
-        path.profit = (req.unitBid - path.band_cost - target_node.unitCpuPrice*path.process_source)*(req.offtime-req.ontime)
-        target_node.leftCpu -= path.process_source
-        target_node.charge += req.unitBid - path.band_cost
+        req.profit = alpha*(req.offtime-req.ontime)
+        target_node.leftCpu -= req.process_source
+        target_node.charge += req.bid/(req.offtime-req.ontime) - path.band_cost
         req.node_id = target_node.id
         return target_node
 
@@ -132,22 +134,26 @@ class Caculator:
                 # print("edge {}'s band is {}".format(e.id,e.leftBand))
                 return False
             path.band_cost += e.unitprice*req.bandwidth
-        if path.band_cost >= req.unitBid:
+        if path.band_cost >= req.bid/(req.offtime-req.ontime):
             # print("req {} and {} failed because of band_cost".format(req.id, path.vec))
             return False
         # 判断算力是否满足条件
-        # 所需最低算力
-        for vnf in req.sfc:
-            path.process_source += config.VNF_DELAY[vnf]
-        path.process_source *= req.bandwidth
+        # 所需算力
+        if req.maxDelay - path.propagation_delay  - len(req.sfc)*1000/req.bandwidth< 0:
+            # print("req {} and {} failed because of delay".format(req.id, path.vec))
+            return False
+        if req.process_source <= 0:
+            for vnf in req.sfc:
+                req.process_source += config.VNF_DELAY[vnf]
+            req.process_source *= req.bandwidth
         # 判断是否有足够算力和最低算力开销
         for node in path.nodes:
             node:DataCenter
             # 判断节点剩余算力是否足够部署sfc
-            if node.leftCpu < path.process_source:
+            if node.leftCpu < req.process_source:
                 continue
             # 判断在该节点部署SFC是否亏本
-            profit = req.unitBid - path.band_cost - node.unitCpuPrice*path.process_source
+            profit = req.bid/(req.offtime-req.ontime) - path.band_cost - node.unitCpuPrice*req.process_source
             if profit <= 0:
                 # print("req {} and {} failed because of profit".format(req.id, path.vec))
                 continue

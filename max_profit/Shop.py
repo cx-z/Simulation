@@ -16,9 +16,9 @@ class Shop:
         super().__init__()
         self.profit:float = 0
         self.req_num:float = 0
-        if choice == 1:
+        if choice == 0:
             self.caculator = Caculator()
-        elif choice == 2:
+        elif choice == 1:
             self.caculator = Contrast1()
         else:
             self.caculator = Contrast2()

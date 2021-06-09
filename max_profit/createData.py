@@ -33,7 +33,7 @@ def req_info(cnt:int)->None:
         while dst == src:
             dst = random.randint(0,13)
         band = random.randint(1,5) # bandwidth
-        maxDelay = random.randint(10,20)*300
+        maxDelay = random.randint(10,30)*500
         ontime = 0 #random.randint(0,80) # 上线时间
         offtime = 99 #ontime + random.randint(10,20)
         bid = random.randint(1,5)*band*200*(offtime-ontime) # 用户出价

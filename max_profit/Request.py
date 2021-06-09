@@ -14,8 +14,9 @@ class Request:
         self.ontime:int = -1
         self.offtime:int = -1
         self.maxDelay:int = 0
-        self.process_source = dict() # 存储在各个节点上所需的算力
+        self.process_source = 0 # 所需的算力
         self.path_vec = tuple() # 路径集合
+        self.profit = 0
         self.node_id = -1
 
     def __lt__(self, other):
